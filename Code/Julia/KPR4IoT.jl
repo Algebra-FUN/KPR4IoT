@@ -4,7 +4,7 @@ Code for simulation of KPR Game for Resource Allocation in IoT
 © 2022 Algebra-FUN(Y. Fan). All rights reserved.
 =#
 
-using Distributions
+using Distributions, Underscores
 using Plots, DataFrames
 import Base, Random
 
@@ -60,14 +60,8 @@ initRBs(N::Integer) = RB.(1:N)
 distance(a::IoT, b::IoT) = √sum((a.coord .- b.coord) .^ 2)
 
 function match_neighbors!(IoTs::Vector{IoT}, r::Real)
-    N = length(IoTs)
-    for i in 1:N
-        IoTs[i].neighbors = []
-        for j in 1:N
-            if i != j && distance(IoTs[i], IoTs[j]) < r
-                push!(IoTs[i].neighbors, IoTs[j])
-            end
-        end
+    for iot in IoTs
+        iot.neighbors = @_ filter(0 < distance(iot, _) < r, IoTs)
     end
 end
 
@@ -77,27 +71,19 @@ service_rate(RBs::Vector{RB}) = mean(RBs[:, :usage] .== 1)
 
 count_usage!(rb::RB; chosen_rbs::Vector{RB}) = rb.usage = count(chosen_rbs[:, :id] .== rb.id)
 
-function cond_neighbor(iot::IoT, cond::Bool)
-    neighbors = []
-    for neighbor in iot.neighbors
-        if status(neighbor) == cond
-            push!(neighbors, neighbor)
-        end
-    end
-    return neighbors
-end
+cond_neighbor(iot::IoT, cond::Bool) = @_ filter(status(_) == cond, iot.neighbors)
 
 function choose_by_rank(iot::IoT; RBs::Vector{RB})
     FNs = cond_neighbor(iot, false)
     if !isempty(FNs)
         min_rank = minimum(rank, FNs)
-        lower_RBs = filter(rb -> rb.rank <= min_rank, RBs)
+        lower_RBs = @_ filter(_.rank <= min_rank, RBs)
         return choose_randomly(iot; RBs=lower_RBs)
     end
     SNs = cond_neighbor(iot, true)
     if !isempty(SNs)
         max_rank = maximum(rank, SNs)
-        higher_RBs = filter(rb -> rb.rank >= max_rank, RBs)
+        higher_RBs = @_ filter(_.rank >= max_rank, RBs)
         return choose_randomly(iot; RBs=higher_RBs)
     end
     return choose_randomly(iot; RBs=RBs)
@@ -133,16 +119,16 @@ function experiment(; p=0.01, rs=1:6, T=100, trials=5)
     rs = collect(rs)
     baseline_25 = 100 * simulation(λ=2.5, R=20, b=5, T=T, p=p, trials=trials)
     baseline_50 = 100 * simulation(λ=5, R=20, b=5, T=T, p=p, trials=trials)
-    learning_25 = 100 .* map(r -> simulation(λ=2.5, R=20, b=5, r=r, T=T, p=p, choose=choose_by_rank, trials=trials), rs)
-    learning_50 = 100 .* map(r -> simulation(λ=5, R=20, b=5, r=r, T=T, p=p, choose=choose_by_rank, trials=trials), rs)
+    learning_25 = 100 .* @_ map(simulation(λ=2.5, R=20, b=5, r=_, T=T, p=p, choose=choose_by_rank, trials=trials), rs)
+    learning_50 = 100 .* @_ map(simulation(λ=5, R=20, b=5, r=_, T=T, p=p, choose=choose_by_rank, trials=trials), rs)
     baseline_25 = baseline_25 .* ones_like(rs)
     baseline_50 = baseline_50 .* ones_like(rs)
     return DataFrame(r=rs, baseline25=baseline_25, baseline50=baseline_50, learning25=learning_25, learning50=learning_50)
 end
 
-function create_experiment_plot(df::DataFrame;p=0.01,ylim=(-0.2, 30))
+function create_experiment_plot(df::DataFrame; p=0.01, ylim=(-0.2, 30))
     fig = plot(df.r, df.learning25, label="Learning with \$\\lambda=2.5\$", line=(:red))
-    plot!(fig ,df.r, df.baseline25, label="Baseline with \$\\lambda=2.5\$", line=(:blue))
+    plot!(fig, df.r, df.baseline25, label="Baseline with \$\\lambda=2.5\$", line=(:blue))
     plot!(fig, df.r, df.learning50, label="Learning with \$\\lambda=5\$", line=(:dash, :red))
     plot!(fig, df.r, df.baseline50, label="Baseline with \$\\lambda=5\$", line=(:dash, :blue))
     xlabel!(fig, "Communication range \$r_c\$ (m)")
