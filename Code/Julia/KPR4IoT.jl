@@ -35,14 +35,14 @@ Base.show(io::IO, x::IoT) = print(io, "IoT[id=$(x.id)]")
 Base.show(io::IO, x::RB) = print(io, "RB[id=$(x.id)]")
 
 function rank(iot::IoT)
-    if iot.rb == nothing
+    if iot.rb === nothing
         return nothing
     end
     return iot.rb.rank
 end
 
 function status(iot::IoT)
-    if iot.rb == nothing
+    if iot.rb === nothing
         return nothing
     end
     return iot.rb == 1
