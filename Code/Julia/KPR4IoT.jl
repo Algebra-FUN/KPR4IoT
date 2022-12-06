@@ -1,7 +1,8 @@
 #=
 KPR4IoT.jl
 Code for simulation of KPR Game for Resource Allocation in IoT
-© 2022 Algebra-FUN(Y. Fan). All rights reserved.
+© 2022 Algebra-FUN(Y. Fan). 
+All rights reserved.
 =#
 
 using Distributions, Underscores
@@ -17,18 +18,18 @@ end
 ones_like(x::Array) = ones(eltype(x), size(x))
 
 mutable struct RB
-    id::Integer
-    rank::Integer
-    usage::Integer
-    RB(id::Integer) = new(id, id, 0)
+    id::Int
+    rank::Int
+    usage::Int
+    RB(id::Int) = new(id, id, 0)
 end
 
 mutable struct IoT
-    id::Integer
+    id::Int
     coord::Vector{Real}
     rb::Union{RB,Nothing}
     neighbors::Vector{IoT}
-    IoT(id::Integer, x::Real, y::Real) = new(id, [x; y], nothing, [])
+    IoT(id::Int, x::Real, y::Real) = new(id, [x; y], nothing, [])
 end
 
 Base.show(io::IO, x::IoT) = print(io, "IoT[id=$(x.id)]")
@@ -55,7 +56,7 @@ function deployIoTs(λ::Real, R::Real)::Vector{IoT}
     return IoT.(1:N, x, y)
 end
 
-initRBs(N::Integer) = RB.(1:N)
+initRBs(N::Int) = RB.(1:N)
 
 distance(a::IoT, b::IoT) = √sum((a.coord .- b.coord) .^ 2)
 
@@ -89,7 +90,7 @@ function choose_by_rank(iot::IoT; RBs::Vector{RB})
     return choose_randomly(iot; RBs=RBs)
 end
 
-function simu!(IoTs::Vector{IoT}, RBs::Vector{RB}; T::Integer=1000, p::Real=0.01, choose=choose_randomly)
+function simu!(IoTs::Vector{IoT}, RBs::Vector{RB}; T::Int=1000, p::Real=0.01, choose=choose_randomly)
     N = length(IoTs)
     rate = zeros(T)
     for t in 1:T
