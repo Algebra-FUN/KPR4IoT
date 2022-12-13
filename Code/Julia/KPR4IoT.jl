@@ -26,10 +26,10 @@ end
 
 mutable struct IoT
     id::Int
-    coord::Vector{Real}
+    coord::Vector{Float64}
     rb::Union{RB,Nothing}
     neighbors::Vector{IoT}
-    IoT(id::Int, x::Real, y::Real) = new(id, [x; y], nothing, [])
+    IoT(id::Int, x::Float64, y::Float64) = new(id, [x; y], nothing, [])
 end
 
 Base.show(io::IO, x::IoT) = print(io, "IoT[id=$(x.id)]")
@@ -49,7 +49,7 @@ function status(iot::IoT)
     return iot.rb == 1
 end
 
-function deployIoTs(λ::Real, R::Real)::Vector{IoT}
+function deployIoTs(λ::Float64, R::Float64)
     N = rand(Poisson(λ * R^2))
     x = rand(Uniform(0, R), N)
     y = rand(Uniform(0, R), N)
@@ -60,7 +60,7 @@ initRBs(N::Int) = RB.(1:N)
 
 distance(a::IoT, b::IoT) = √sum((a.coord .- b.coord) .^ 2)
 
-function match_neighbors!(IoTs::Vector{IoT}, r::Real)
+function match_neighbors!(IoTs::Vector{IoT}, r::Float64)
     for iot in IoTs
         iot.neighbors = @_ filter(0 < distance(iot, _) < r, IoTs)
     end
@@ -70,18 +70,22 @@ choose_randomly(iot::IoT; RBs::Vector{RB}) = rand(RBs)
 
 service_rate(RBs::Vector{RB}) = mean(RBs[:, :usage] .== 1)
 
-count_usage!(rb::RB; chosen_rbs::Vector{RB}) = rb.usage = count(chosen_rbs[:, :id] .== rb.id)
-
-cond_neighbor(iot::IoT, cond::Bool) = @_ filter(status(_) == cond, iot.neighbors)
+function count_usage!(RBs::Vector{RB}, chosen_rbs::Vector{RB})
+    RBs[:, :usage] = 0
+    for rb in chosen_rbs
+        rb.usage += 1
+    end
+end
 
 function choose_by_rank(iot::IoT; RBs::Vector{RB})
-    FNs = cond_neighbor(iot, false)
+    allstatus = status.(iot.neighbors)
+    FNs = iot.neighbors[allstatus.==false]
     if !isempty(FNs)
         min_rank = minimum(rank, FNs)
         lower_RBs = @_ filter(_.rank <= min_rank, RBs)
         return choose_randomly(iot; RBs=lower_RBs)
     end
-    SNs = cond_neighbor(iot, true)
+    SNs = iot.neighbors[allstatus.==true]
     if !isempty(SNs)
         max_rank = maximum(rank, SNs)
         higher_RBs = @_ filter(_.rank >= max_rank, RBs)
@@ -90,13 +94,13 @@ function choose_by_rank(iot::IoT; RBs::Vector{RB})
     return choose_randomly(iot; RBs=RBs)
 end
 
-function simu!(IoTs::Vector{IoT}, RBs::Vector{RB}; T::Int=1000, p::Real=0.01, choose=choose_randomly)
+function simu!(IoTs::Vector{IoT}, RBs::Vector{RB}; T::Int=1000, p::Float64=0.01, choose=choose_randomly)
     N = length(IoTs)
-    rate = zeros(T)
+    rate = Vector{Float64}(undef, T)
     for t in 1:T
-        issends = rand(Binomial(1, p), N) .|> Bool
+        issends = rand(N) .< p
         chosen_rbs = choose.(IoTs[issends]; RBs=RBs)
-        count_usage!.(RBs; chosen_rbs=chosen_rbs)
+        count_usage!(RBs, chosen_rbs)
         IoTs[issends, :rb] = chosen_rbs
         IoTs[.!issends, :rb] = nothing
         rate[t] = service_rate(RBs)
@@ -104,9 +108,9 @@ function simu!(IoTs::Vector{IoT}, RBs::Vector{RB}; T::Int=1000, p::Real=0.01, ch
     return mean(rate)
 end
 
-function simulation(; λ=2.5, R=20, b=5, r=0, T=1000, p=0.01, choose=choose_randomly, trials=5, seed=5003666)
+function simulation(; λ=2.5, R=20.0, b=5, r=0.0, T=1000, p=0.01, choose=choose_randomly, trials=5, seed=5003666)
     Random.seed!(seed)
-    rates = zeros(trials)
+    rates = Vector{Float64}(undef, trials)
     for i in 1:trials
         IoTs = deployIoTs(λ, R)
         RBs = initRBs(b)
@@ -116,12 +120,12 @@ function simulation(; λ=2.5, R=20, b=5, r=0, T=1000, p=0.01, choose=choose_rand
     return mean(rates)
 end
 
-function experiment(; p=0.01, rs=1:6, T=100, trials=5)
+function experiment(; p=0.01, rs=1.0:0.2:6.0, T=100, trials=5)
     rs = collect(rs)
-    baseline_25 = 100 * simulation(λ=2.5, R=20, b=5, T=T, p=p, trials=trials)
-    baseline_50 = 100 * simulation(λ=5, R=20, b=5, T=T, p=p, trials=trials)
-    learning_25 = 100 .* @_ map(simulation(λ=2.5, R=20, b=5, r=_, T=T, p=p, choose=choose_by_rank, trials=trials), rs)
-    learning_50 = 100 .* @_ map(simulation(λ=5, R=20, b=5, r=_, T=T, p=p, choose=choose_by_rank, trials=trials), rs)
+    baseline_25 = 100 * simulation(λ=2.5, R=20.0, b=5, T=T, p=p, trials=trials)
+    baseline_50 = 100 * simulation(λ=5.0, R=20.0, b=5, T=T, p=p, trials=trials)
+    learning_25 = 100 .* @_ map(simulation(λ=2.5, R=20.0, b=5, r=_, T=T, p=p, choose=choose_by_rank, trials=trials), rs)
+    learning_50 = 100 .* @_ map(simulation(λ=5.0, R=20.0, b=5, r=_, T=T, p=p, choose=choose_by_rank, trials=trials), rs)
     baseline_25 = baseline_25 .* ones_like(rs)
     baseline_50 = baseline_50 .* ones_like(rs)
     return DataFrame(r=rs, baseline25=baseline_25, baseline50=baseline_50, learning25=learning_25, learning50=learning_50)
